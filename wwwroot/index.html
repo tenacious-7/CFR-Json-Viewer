@@ -1,0 +1,145 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Compressed JSON Viewer - Infinite Scroll</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script crossorigin src="https://unpkg.com/babel-standalone@6.26.0/babel.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 2rem;
+            background: #f9f9f9;
+        }
+
+        #root {
+            padding: 1rem;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            max-height: 90vh;
+            overflow: hidden;
+        }
+
+        #scrollContainer {
+            max-height: 70vh;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 1rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 8px;
+            border: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #f0f0f0;
+        }
+
+        p {
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div id="root">Loading...</div>
+
+    <script type="text/babel">
+        const App = () => {
+          const [allData, setAllData] = React.useState([]);
+          const [displayData, setDisplayData] = React.useState([]);
+          const [page, setPage] = React.useState(1);
+          const [loading, setLoading] = React.useState(false);
+          const [hasMore, setHasMore] = React.useState(true);
+          const scrollRef = React.useRef(null);
+          const itemsPerPage = 20;
+
+          const fetchData = () => {
+            setLoading(true);
+            fetch("http://localhost:5000/getdata")
+              .then(res => res.json())
+              .then(data => {
+                const parsedData = Array.isArray(data) ? data : [data];
+                setAllData(parsedData);
+                setDisplayData(parsedData.slice(0, itemsPerPage));
+                setLoading(false);
+              })
+              .catch(err => {
+                console.error("Fetch error:", err);
+                setLoading(false);
+                setHasMore(false);
+              });
+          };
+
+          React.useEffect(() => {
+            fetchData();
+          }, []);
+
+          React.useEffect(() => {
+            const container = scrollRef.current;
+            if (!container) return;
+
+            const handleScroll = () => {
+              if (
+                container.scrollTop + container.clientHeight >= container.scrollHeight - 10 &&
+                hasMore &&
+                !loading
+              ) {
+                const nextPage = page + 1;
+                const nextItems = allData.slice(0, nextPage * itemsPerPage);
+                setDisplayData(nextItems);
+                setPage(nextPage);
+                if (nextItems.length >= allData.length) {
+                  setHasMore(false);
+                }
+              }
+            };
+
+            container.addEventListener("scroll", handleScroll);
+            return () => container.removeEventListener("scroll", handleScroll);
+          }, [allData, hasMore, loading, page]);
+
+          return (
+            <div>
+              <h2>📦 Decompressed JSON Table (Infinite Scroll)</h2>
+              {displayData.length === 0 ? (
+                <p>🔄 Loading data...</p>
+              ) : (
+                <div id="scrollContainer" ref={scrollRef}>
+                  <table>
+                    <thead>
+                      <tr>
+                        {Object.keys(displayData[0]).map((key, idx) => (
+                          <th key={idx}>{key}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {displayData.map((item, idx) => (
+                        <tr key={idx}>
+                          {Object.values(item).map((val, j) => (
+                            <td key={j}>{val}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {loading && <p>🔄 Loading more...</p>}
+                  {!hasMore && <p>✅ All data loaded.</p>}
+                </div>
+              )}
+            </div>
+          );
+        };
+
+        ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    </script>
+</body>
+</html>
