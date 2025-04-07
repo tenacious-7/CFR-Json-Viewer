@@ -10,7 +10,7 @@
 //using Microsoft.AspNetCore.Builder;
 //using Microsoft.Extensions.Hosting;
 
-//string connectionString = @"Data Source=92.204.136.118;Initial Catalog=CredProDB_Site7;User ID=devusr1;Password=SQL@#21;TrustServerCertificate=True;";
+//string connectionString = @"ConnectionString";
 //string jsonFilePath = @"D:\\ConsoleAppForJSON\\json\\CFR.json";
 
 //if (args.Contains("--api"))
@@ -138,7 +138,7 @@ app.UseStaticFiles();   // Serves JS, CSS, images, etc.
 // ✅ API Endpoint - Decompress JSON from DB and return
 app.MapGet("/getdata", async () =>
 {
-    string connectionString = @"Data Source=92.204.136.118;Initial Catalog=CredProDB_Site7;User ID=devusr1;Password=SQL@#21;TrustServerCertificate=True;";
+    string connectionString = @"ConnectionString";
     try
     {
         using (SqlConnection conn = new SqlConnection(connectionString))
