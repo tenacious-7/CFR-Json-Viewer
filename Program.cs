@@ -1,4 +1,4 @@
-﻿
+
 ///Encryption Codes
 //// Required namespaces
 ///
@@ -10,7 +10,7 @@
 //using Microsoft.AspNetCore.Builder;
 //using Microsoft.Extensions.Hosting;
 
-//string connectionString = @"ConnectionString";
+//string connectionString = @"";
 //string jsonFilePath = @"D:\\ConsoleAppForJSON\\json\\CFR.json";
 
 //if (args.Contains("--api"))
@@ -136,28 +136,70 @@ app.UseDefaultFiles();  // Serves index.html by default
 app.UseStaticFiles();   // Serves JS, CSS, images, etc.
 
 // ✅ API Endpoint - Decompress JSON from DB and return
+//app.MapGet("/getdata", async () =>
+//{
+//    string connectionString = @"";
+//    try
+//    {
+//        using (SqlConnection conn = new SqlConnection(connectionString))
+//        {
+//            await conn.OpenAsync();
+
+//            string query = "SELECT TOP 1 CompressedCaseDetails FROM tblCFRjsondata ORDER BY Id DESC";
+
+//            using (SqlCommand cmd = new SqlCommand(query, conn))
+//            {
+//                var result = await cmd.ExecuteScalarAsync();
+
+//                if (result != DBNull.Value && result is byte[] compressedBytes)
+//                {
+//                    string json = DecompressGZip(compressedBytes);
+//                    return Results.Content(json, "application/json");
+//                }
+//            }
+//        }
+//        return Results.NotFound("⚠️ No compressed data found.");
+//    }
+//    catch (Exception ex)
+//    {
+//        return Results.Problem("❌ Error: " + ex.Message);
+//    }
+//});
+
 app.MapGet("/getdata", async () =>
 {
-    string connectionString = @"ConnectionString1";
+    string connectionString = @"";
+
+
     try
     {
+        var fetchStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
         using (SqlConnection conn = new SqlConnection(connectionString))
         {
             await conn.OpenAsync();
 
             string query = "SELECT TOP 1 CompressedCaseDetails FROM tblCFRjsondata ORDER BY Id DESC";
-
             using (SqlCommand cmd = new SqlCommand(query, conn))
             {
                 var result = await cmd.ExecuteScalarAsync();
 
+                fetchStopwatch.Stop();
+                Console.WriteLine($"Data fetch time through DB: {fetchStopwatch.ElapsedMilliseconds} ms");
+
                 if (result != DBNull.Value && result is byte[] compressedBytes)
                 {
-                    string json = DecompressGZip(compressedBytes);
-                    return Results.Content(json, "application/json");
+                    var decompressStopwatch = System.Diagnostics.Stopwatch.StartNew();
+                    string json = DecompressGZip(compressedBytes);  // Just for testing decompression time
+                    decompressStopwatch.Stop();
+                    Console.WriteLine($"Decompression time: {decompressStopwatch.ElapsedMilliseconds} ms");
+
+                    string base64 = Convert.ToBase64String(compressedBytes);
+                    return Results.Json(new { compressed = base64 });
                 }
             }
         }
+
         return Results.NotFound("⚠️ No compressed data found.");
     }
     catch (Exception ex)
@@ -165,6 +207,8 @@ app.MapGet("/getdata", async () =>
         return Results.Problem("❌ Error: " + ex.Message);
     }
 });
+
+
 
 // ✅ Start the app
 app.Run("http://localhost:5000");

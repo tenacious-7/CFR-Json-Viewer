@@ -2,10 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
-    <title>Compressed JSON Viewer - Infinite Scroll</title>
+    <title>Compressed JSON Viewer</title>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script crossorigin src="https://unpkg.com/babel-standalone@6.26.0/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -18,128 +20,754 @@
             background: white;
             border-radius: 8px;
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            max-height: 90vh;
-            overflow: hidden;
         }
 
-        #scrollContainer {
-            max-height: 70vh;
-            overflow-y: auto;
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        input[type="text"] {
+            padding: 6px;
+            width: 60%;
+        }
+
+        #tableContainer {
+            overflow-x: auto;
             border: 1px solid #ccc;
             padding: 1rem;
+            max-height: 70vh;
+            overflow-y: auto;
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
+            table-layout: auto;
         }
 
         th, td {
             padding: 8px;
             border: 1px solid #ddd;
+            text-align: left;
+            vertical-align: top;
+            word-break: normal;
+            white-space: nowrap;
         }
 
         th {
             background-color: #f0f0f0;
+            font-weight: bold;
         }
 
-        p {
-            margin-top: 1rem;
+        .sticky-footer {
+            position: fixed;
+            width: 98%;
+            bottom: 0;
+        }
+
+        #logContainer {
+            background-color: #1e1e1e;
+            color: #ffffff;
+            border: 2px solid #444;
+            padding: 10px;
+            height: 250px;
+            overflow-y: auto;
+            font-family: Consolas, monospace;
+            font-size: 14px;
+            border-radius: 8px;
+            box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.3);
+            scroll-behavior: smooth;
+        }
+
+            #logContainer::-webkit-scrollbar {
+                width: 10px;
+            }
+
+            #logContainer::-webkit-scrollbar-track {
+                background: #333;
+                border-radius: 10px;
+            }
+
+            #logContainer::-webkit-scrollbar-thumb {
+                background: #4CAF50;
+                border-radius: 10px;
+            }
+
+                #logContainer::-webkit-scrollbar-thumb:hover {
+                    background: #45a049;
+                }
+
+        .log-entry {
+            padding: 5px;
+            border-bottom: 1px solid #444;
+        }
+
+        .log-info {
+            color: #4CAF50;
+        }
+
+        .log-warn {
+            color: #FFC107;
+        }
+
+        .log-error {
+            color: #FF5733;
+        }
+
+        .sticky-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: #1e1e1e;
+            padding: 10px;
+            z-index: 1000;
+            border-top: 2px solid #444;
+            border-radius: 10px 10px 0 0;
+        }
+
+        #toggleLog {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            font-size: 14px;
+            cursor: pointer;
+            border-radius: 5px;
         }
     </style>
 </head>
 <body>
     <div id="root">Loading...</div>
 
-    <script type="text/babel">
+    <!--Full Page Rendering Code-->
+
+    <!--<script type="text/babel">
         const App = () => {
-          const [allData, setAllData] = React.useState([]);
-          const [displayData, setDisplayData] = React.useState([]);
-          const [page, setPage] = React.useState(1);
-          const [loading, setLoading] = React.useState(false);
-          const [hasMore, setHasMore] = React.useState(true);
-          const scrollRef = React.useRef(null);
-          const itemsPerPage = 20;
+            const [data, setData] = React.useState([]);
+            const [searchQuery, setSearchQuery] = React.useState("");
+            const [decompressTime, setDecompressTime] = React.useState(null);
+            const [renderStartTime, setRenderStartTime] = React.useState(null);
 
-          const fetchData = () => {
-            setLoading(true);
-            fetch("http://localhost:5000/getdata")
-              .then(res => res.json())
-              .then(data => {
-                const parsedData = Array.isArray(data) ? data : [data];
-                setAllData(parsedData);
-                setDisplayData(parsedData.slice(0, itemsPerPage));
-                setLoading(false);
-              })
-              .catch(err => {
-                console.error("Fetch error:", err);
-                setLoading(false);
-                setHasMore(false);
-              });
-          };
-
-          React.useEffect(() => {
-            fetchData();
-          }, []);
-
-          React.useEffect(() => {
-            const container = scrollRef.current;
-            if (!container) return;
-
-            const handleScroll = () => {
-              if (
-                container.scrollTop + container.clientHeight >= container.scrollHeight - 10 &&
-                hasMore &&
-                !loading
-              ) {
-                const nextPage = page + 1;
-                const nextItems = allData.slice(0, nextPage * itemsPerPage);
-                setDisplayData(nextItems);
-                setPage(nextPage);
-                if (nextItems.length >= allData.length) {
-                  setHasMore(false);
-                }
-              }
+            const log = (message, level = "info") => {
+                const timestamp = new Date().toLocaleTimeString();
+                const entry = `<div class="log-entry log-${level}">[${timestamp}] ${message}</div>`;
+                $("#logContainer").append(entry);
+                $("#logContainer").scrollTop($("#logContainer")[0].scrollHeight);
             };
 
-            container.addEventListener("scroll", handleScroll);
-            return () => container.removeEventListener("scroll", handleScroll);
-          }, [allData, hasMore, loading, page]);
+            const fetchData = () => {
+                const startTime = performance.now();
+                log("📡 Sending request to API...", "info");
 
-          return (
-            <div>
-              <h2>📦 Decompressed JSON Table (Infinite Scroll)</h2>
-              {displayData.length === 0 ? (
-                <p>🔄 Loading data...</p>
-              ) : (
-                <div id="scrollContainer" ref={scrollRef}>
-                  <table>
-                    <thead>
-                      <tr>
-                        {Object.keys(displayData[0]).map((key, idx) => (
-                          <th key={idx}>{key}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {displayData.map((item, idx) => (
-                        <tr key={idx}>
-                          {Object.values(item).map((val, j) => (
-                            <td key={j}>{val}</td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {loading && <p>🔄 Loading more...</p>}
-                  {!hasMore && <p>✅ All data loaded.</p>}
+                fetch("http://localhost:5000/getdata")
+                    .then(async res => {
+                        const fetchEndTime = performance.now();
+                        const fetchDuration = Math.round(fetchEndTime - startTime);
+                        log(`📥 Fetched response from API in ${fetchDuration} ms`, "info");
+
+                        const resData = await res.json();
+
+                        const binaryStr = atob(resData.compressed);
+                        const byteArray = new Uint8Array(binaryStr.length);
+                        for (let i = 0; i < binaryStr.length; i++) {
+                            byteArray[i] = binaryStr.charCodeAt(i);
+                        }
+
+                        const decompressStart = performance.now();
+                        const decompressedStr = pako.ungzip(byteArray, { to: "string" });
+                        const decompressEnd = performance.now();
+                        const decompressDuration = Math.round(decompressEnd - decompressStart);
+
+                        const jsonData = Array.isArray(JSON.parse(decompressedStr))
+                            ? JSON.parse(decompressedStr)
+                            : [JSON.parse(decompressedStr)];
+
+                        setData(jsonData);
+                        setDecompressTime(decompressDuration);
+
+                        log(`✅ Decompression completed in ${decompressDuration} ms`, "info");
+                        log(`⏱ Total time (fetch + decompress): ${fetchDuration + decompressDuration} ms`, "info");
+
+                        setRenderStartTime(performance.now());
+                    })
+                    .catch(err => {
+                        console.error("Fetch or decompression error:", err);
+                        log("❌ Fetch or decompression error: " + err.message, "error");
+                    });
+            };
+
+            const generateTable = (rows) => {
+                if (rows.length === 0) return "";
+
+                let table = '<table id="dataTable"><thead><tr>';
+                Object.keys(rows[0]).forEach(key => {
+                    table += `<th>${key}</th>`;
+                });
+                table += '</tr></thead><tbody>';
+
+                rows.forEach(row => {
+                    table += '<tr>';
+                    Object.values(row).forEach(value => {
+                        table += `<td>${value}</td>`;
+                    });
+                    table += '</tr>';
+                });
+
+                table += '</tbody></table>';
+                return table;
+            };
+
+            const filteredData = React.useMemo(() => {
+                return data.filter(row =>
+                    Object.values(row).some(val =>
+                        String(val).toLowerCase().includes(searchQuery.toLowerCase())
+                    )
+                );
+            }, [searchQuery, data]);
+
+            React.useEffect(() => {
+                fetchData();
+            }, []);
+
+            React.useEffect(() => {
+                const html = generateTable(filteredData);
+                $("#tableContainer").html(html);
+
+                if (renderStartTime) {
+                    setTimeout(() => {
+                        const renderEndTime = performance.now();
+                        const renderDuration = Math.round(renderEndTime - renderStartTime);
+                        log(`🎨 UI rendered in ${renderDuration} ms`, "info");
+                        setRenderStartTime(null);
+                    }, 0);
+                }
+            }, [filteredData]);
+
+            return (
+                <div>
+                    <h2>📦 Decompressed JSON Table Viewer</h2>
+                    <div className="controls">
+                        <input
+                            type="text"
+                            placeholder="🔍 Search..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                        />
+                    </div>
+                    <div id="tableContainer">
+                        {/* Table rendered here */}
+                    </div>
                 </div>
-              )}
-            </div>
-          );
+            );
         };
 
         ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    </script>-->
+
+    <!--Implementing infinite scrolling and lazy loading for UI Rendering-->
+
+
+    <!--<script type="text/babel">
+    const App = () => {
+        const [data, setData] = React.useState([]);
+        const [searchQuery, setSearchQuery] = React.useState("");
+        const [decompressTime, setDecompressTime] = React.useState(null);
+        const [renderStartTime, setRenderStartTime] = React.useState(null);
+        const [displayCount, setDisplayCount] = React.useState(50); // for lazy loading
+
+        const log = (message, level = "info") => {
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = `<div class="log-entry log-${level}">[${timestamp}] ${message}</div>`;
+            $("#logContainer").append(entry);
+            $("#logContainer").scrollTop($("#logContainer")[0].scrollHeight);
+        };
+
+        const fetchData = () => {
+            const startTime = performance.now();
+            log("📡 Sending request to API...", "info");
+
+            fetch("http://localhost:5000/getdata")
+                .then(async res => {
+                    const fetchEndTime = performance.now();
+                    const fetchDuration = Math.round(fetchEndTime - startTime);
+                    log(`📥 Fetched response from API in ${fetchDuration} ms`, "info");
+
+                    const resData = await res.json();
+
+                    const binaryStr = atob(resData.compressed);
+                    const byteArray = new Uint8Array(binaryStr.length);
+                    for (let i = 0; i < binaryStr.length; i++) {
+                        byteArray[i] = binaryStr.charCodeAt(i);
+                    }
+
+                    const decompressStart = performance.now();
+                    const decompressedStr = pako.ungzip(byteArray, { to: "string" });
+                    const decompressEnd = performance.now();
+                    const decompressDuration = Math.round(decompressEnd - decompressStart);
+
+                    const jsonData = Array.isArray(JSON.parse(decompressedStr))
+                        ? JSON.parse(decompressedStr)
+                        : [JSON.parse(decompressedStr)];
+
+                    setData(jsonData);
+                    setDecompressTime(decompressDuration);
+
+                    log(`✅ Decompression completed in ${decompressDuration} ms`, "info");
+                    log(`⏱ Total time (fetch + decompress): ${fetchDuration + decompressDuration} ms`, "info");
+
+                    setRenderStartTime(performance.now());
+                })
+                .catch(err => {
+                    console.error("Fetch or decompression error:", err);
+                    log("❌ Fetch or decompression error: " + err.message, "error");
+                });
+        };
+
+        const generateTable = (rows) => {
+            if (rows.length === 0) return "";
+
+            let table = '<table id="dataTable"><thead><tr>';
+            Object.keys(rows[0]).forEach(key => {
+                table += `<th>${key}</th>`;
+            });
+            table += '</tr></thead><tbody>';
+
+            rows.forEach(row => {
+                table += '<tr>';
+                Object.values(row).forEach(value => {
+                    table += `<td>${value}</td>`;
+                });
+                table += '</tr>';
+            });
+
+            table += '</tbody></table>';
+            return table;
+        };
+
+        const filteredData = React.useMemo(() => {
+            return data.filter(row =>
+                Object.values(row).some(val =>
+                    String(val).toLowerCase().includes(searchQuery.toLowerCase())
+                )
+            );
+        }, [searchQuery, data]);
+
+        const visibleData = React.useMemo(() => {
+            return filteredData.slice(0, displayCount);
+        }, [filteredData, displayCount]);
+
+        React.useEffect(() => {
+            fetchData();
+        }, []);
+
+        React.useEffect(() => {
+            const html = generateTable(visibleData);
+            $("#tableContainer").html(html);
+
+            if (renderStartTime) {
+                setTimeout(() => {
+                    const renderEndTime = performance.now();
+                    const renderDuration = Math.round(renderEndTime - renderStartTime);
+                    log(`🎨 UI rendered in ${renderDuration} ms`, "info");
+                    setRenderStartTime(null);
+                }, 0);
+            }
+        }, [visibleData]);
+
+        React.useEffect(() => {
+            const handleScroll = () => {
+                const container = document.getElementById("tableContainer");
+                if (container.scrollTop + container.clientHeight >= container.scrollHeight - 100) {
+                    const before = performance.now();
+                    setDisplayCount(prev => {
+                        const next = prev + 50;
+                        log(`🌀 Lazy loading next 50 rows (total: ${next})`, "warn");
+                        return next;
+                    });
+
+                    setTimeout(() => {
+                        const after = performance.now();
+                        const lazyRenderTime = Math.round(after - before);
+                        log(`⚡ Lazy load render in ${lazyRenderTime} ms`, "warn");
+                    }, 0);
+                }
+            };
+
+            const container = document.getElementById("tableContainer");
+            container.addEventListener("scroll", handleScroll);
+            return () => container.removeEventListener("scroll", handleScroll);
+        }, []);
+
+        return (
+            <div>
+                <h2>📦 Decompressed JSON Table Viewer</h2>
+                <div className="controls">
+                    <input
+                        type="text"
+                        placeholder="🔍 Search..."
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                    />
+                </div>
+                <div id="tableContainer" style={{ overflowY: "auto", maxHeight: "70vh" }}>
+                    {/* Table rendered here */}
+                </div>
+            </div>
+        );
+    };
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    </script>-->
+
+    <!--Updated Full Script with Auto Rendering Feature:-->
+
+    <!--<script type="text/babel">
+    const App = () => {
+        const [data, setData] = React.useState([]);
+        const [searchQuery, setSearchQuery] = React.useState("");
+        const [decompressTime, setDecompressTime] = React.useState(null);
+        const [renderStartTime, setRenderStartTime] = React.useState(null);
+        const [displayCount, setDisplayCount] = React.useState(50); // start with 50 rows
+
+        const log = (message, level = "info") => {
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = `<div class="log-entry log-${level}">[${timestamp}] ${message}</div>`;
+            $("#logContainer").append(entry);
+            $("#logContainer").scrollTop($("#logContainer")[0].scrollHeight);
+        };
+
+        const fetchData = () => {
+            const startTime = performance.now();
+            log("📡 Sending request to API...", "info");
+
+            fetch("http://localhost:5000/getdata")
+                .then(async res => {
+                    const fetchEndTime = performance.now();
+                    const fetchDuration = Math.round(fetchEndTime - startTime);
+                    log(`📥 Fetched response from API in ${fetchDuration} ms`, "info");
+
+                    const resData = await res.json();
+
+                    const binaryStr = atob(resData.compressed);
+                    const byteArray = new Uint8Array(binaryStr.length);
+                    for (let i = 0; i < binaryStr.length; i++) {
+                        byteArray[i] = binaryStr.charCodeAt(i);
+                    }
+
+                    const decompressStart = performance.now();
+                    const decompressedStr = pako.ungzip(byteArray, { to: "string" });
+                    const decompressEnd = performance.now();
+                    const decompressDuration = Math.round(decompressEnd - decompressStart);
+
+                    const jsonData = Array.isArray(JSON.parse(decompressedStr))
+                        ? JSON.parse(decompressedStr)
+                        : [JSON.parse(decompressedStr)];
+
+                    setData(jsonData);
+                    setDecompressTime(decompressDuration);
+
+                    log(`✅ Decompression completed in ${decompressDuration} ms`, "info");
+                    log(`⏱ Total time (fetch + decompress): ${fetchDuration + decompressDuration} ms`, "info");
+
+                    setRenderStartTime(performance.now());
+                })
+                .catch(err => {
+                    console.error("Fetch or decompression error:", err);
+                    log("❌ Fetch or decompression error: " + err.message, "error");
+                });
+        };
+
+        const generateTable = (rows) => {
+            if (rows.length === 0) return "";
+
+            let table = '<table id="dataTable"><thead><tr>';
+            Object.keys(rows[0]).forEach(key => {
+                table += `<th>${key}</th>`;
+            });
+            table += '</tr></thead><tbody>';
+
+            rows.forEach(row => {
+                table += '<tr>';
+                Object.values(row).forEach(value => {
+                    table += `<td>${value}</td>`;
+                });
+                table += '</tr>';
+            });
+
+            table += '</tbody></table>';
+            return table;
+        };
+
+        const filteredData = React.useMemo(() => {
+            return data.filter(row =>
+                Object.values(row).some(val =>
+                    String(val).toLowerCase().includes(searchQuery.toLowerCase())
+                )
+            );
+        }, [searchQuery, data]);
+
+        const visibleData = React.useMemo(() => {
+            return filteredData.slice(0, displayCount);
+        }, [filteredData, displayCount]);
+
+        React.useEffect(() => {
+            fetchData();
+        }, []);
+
+        React.useEffect(() => {
+            const html = generateTable(visibleData);
+            $("#tableContainer").html(html);
+
+            if (renderStartTime) {
+                setTimeout(() => {
+                    const renderEndTime = performance.now();
+                    const renderDuration = Math.round(renderEndTime - renderStartTime);
+                    log(`🎨 UI rendered in ${renderDuration} ms`, "info");
+                    setRenderStartTime(null);
+                }, 0);
+            }
+        }, [visibleData]);
+
+        // 🔄 Auto-render more rows progressively
+        React.useEffect(() => {
+            if (displayCount >= filteredData.length) return;
+
+            const interval = setInterval(() => {
+                setDisplayCount(prev => {
+                    const next = Math.min(prev + 50, filteredData.length);
+                    log(`⏳ Auto-rendering next 50 rows (total: ${next})`, "warn");
+
+                    if (next >= filteredData.length) {
+                        clearInterval(interval);
+                        log(`✅ All rows rendered.`, "info");
+                    }
+
+                    return next;
+                });
+            }, 5); // Delay between chunks
+
+            return () => clearInterval(interval);
+        }, [filteredData]);
+
+        return (
+            <div>
+                <h2>📦 Decompressed JSON Table Viewer</h2>
+                <div className="controls">
+                    <input
+                        type="text"
+                        placeholder="🔍 Search..."
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                    />
+                </div>
+                <div id="tableContainer" style={{ overflowY: "auto", maxHeight: "70vh" }}>
+                    {/* Table rendered here */}
+                </div>
+            </div>
+        );
+    };
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    </script>-->
+
+    <!--Auto Progressive Rendering-->
+
+<script type="text/babel">
+const App = () => {
+    const [data, setData] = React.useState([]);
+    const [searchQuery, setSearchQuery] = React.useState("");
+    const [decompressTime, setDecompressTime] = React.useState(null);
+    const [renderStartTime, setRenderStartTime] = React.useState(null);
+    const [displayCount, setDisplayCount] = React.useState(50); // Start with 50
+
+    const log = (message, level = "info") => {
+        const timestamp = new Date().toLocaleTimeString();
+        const entry = `<div class="log-entry log-${level}">[${timestamp}] ${message}</div>`;
+        $("#logContainer").append(entry);
+        $("#logContainer").scrollTop($("#logContainer")[0].scrollHeight);
+    };
+
+    const fetchData = () => {
+        const startTime = performance.now();
+        log("📡 Sending request to API...", "info");
+
+        fetch("http://localhost:5000/getdata")
+            .then(async res => {
+                const fetchEndTime = performance.now();
+                const fetchDuration = Math.round(fetchEndTime - startTime);
+                log(`📥 Fetched response from API in ${fetchDuration} ms`, "info");
+
+                const resData = await res.json();
+
+                  // 📦 Calculate response size in MB
+                  const base64Length = resData.compressed.length;
+                  const responseSizeInBytes = base64Length * (3 / 4); // Base64 decoding estimate
+                  const responseSizeInMB = (responseSizeInBytes / (1024 * 1024)).toFixed(2);
+                  log(`📁 Response size: ${responseSizeInMB} MB`, "info");
+
+                const binaryStr = atob(resData.compressed);
+                const byteArray = new Uint8Array(binaryStr.length);
+                for (let i = 0; i < binaryStr.length; i++) {
+                    byteArray[i] = binaryStr.charCodeAt(i);
+                }
+
+                const decompressStart = performance.now();
+                const decompressedStr = pako.ungzip(byteArray, { to: "string" });
+                const decompressEnd = performance.now();
+
+              // 📄 Calculate decompressed JSON size in MB
+             const decompressedSizeInBytes = new TextEncoder().encode(decompressedStr).length;
+             const decompressedSizeInMB = (decompressedSizeInBytes / (1024 * 1024)).toFixed(2);
+             log(`📂 Decompressed JSON size: ${decompressedSizeInMB} MB`, "info");
+
+
+                const decompressDuration = Math.round(decompressEnd - decompressStart);
+
+                const jsonData = Array.isArray(JSON.parse(decompressedStr))
+                    ? JSON.parse(decompressedStr)
+                    : [JSON.parse(decompressedStr)];
+
+                setData(jsonData);
+                setDecompressTime(decompressDuration);
+
+                log(`✅ Decompression completed in ${decompressDuration} ms`, "info");
+                log(`⏱ Total time (fetch + decompress): ${fetchDuration + decompressDuration} ms`, "info");
+
+                setRenderStartTime(performance.now());
+            })
+            .catch(err => {
+                console.error("Fetch or decompression error:", err);
+                log("❌ Fetch or decompression error: " + err.message, "error");
+            });
+    };
+
+    const generateTable = (rows) => {
+        if (rows.length === 0) return "";
+
+        let table = '<table id="dataTable"><thead><tr>';
+        Object.keys(rows[0]).forEach(key => {
+            table += `<th>${key}</th>`;
+        });
+        table += '</tr></thead><tbody>';
+
+        rows.forEach(row => {
+            table += '<tr>';
+            Object.values(row).forEach(value => {
+                table += `<td>${value}</td>`;
+            });
+            table += '</tr>';
+        });
+
+        table += '</tbody></table>';
+        return table;
+    };
+
+    const filteredData = React.useMemo(() => {
+        return data.filter(row =>
+            Object.values(row).some(val =>
+                String(val).toLowerCase().includes(searchQuery.toLowerCase())
+            )
+        );
+    }, [searchQuery, data]);
+
+    const visibleData = React.useMemo(() => {
+        return filteredData.slice(0, displayCount);
+    }, [filteredData, displayCount]);
+
+    React.useEffect(() => {
+        fetchData();
+    }, []);
+
+    React.useEffect(() => {
+        const html = generateTable(visibleData);
+        $("#tableContainer").html(html);
+
+        if (renderStartTime) {
+            setTimeout(() => {
+                const renderEndTime = performance.now();
+                const renderDuration = Math.round(renderEndTime - renderStartTime);
+                log(`🎨 UI rendered in ${renderDuration} ms`, "info");
+                setRenderStartTime(null);
+            }, 0);
+        }
+    }, [visibleData]);
+
+    // 🚀 Auto progressive rendering logic
+    React.useEffect(() => {
+        if (filteredData.length === 0) return;
+
+        let chunkSize = 50; // Initial chunk
+        const maxChunkSize = 1000; // Optional max chunk
+        const growthRate = 10; // Grow by 1.5x
+
+        const interval = setInterval(() => {
+            setDisplayCount(prev => {
+                const next = Math.min(prev + Math.floor(chunkSize), filteredData.length);
+                log(`⏳ Auto-rendering ${Math.floor(chunkSize)} rows (total: ${next})`, "warn");
+
+                if (next >= filteredData.length) {
+                    clearInterval(interval);
+                    log(`✅ All rows rendered.`, "info");
+                }
+
+                chunkSize = Math.min(chunkSize * growthRate, maxChunkSize); // Increase chunk size
+                return next;
+            });
+        }, 100); // Delay between chunks
+
+        return () => clearInterval(interval);
+    }, [filteredData]);
+
+    return (
+        <div>
+            <h2>📦 Decompressed JSON Table Viewer</h2>
+            <div className="controls">
+                <input
+                    type="text"
+                    placeholder="🔍 Search..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                />
+            </div>
+            <div id="tableContainer" style={{ overflowY: "auto", maxHeight: "70vh" }}>
+                {/* Table rendered here */}
+            </div>
+        </div>
+    );
+};
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+
+
+    <!-- Sticky Footer for Logs -->
+    <div id="logWrapper" class="sticky-footer">
+        <button id="toggleLog" style="margin-bottom: 5px;">🔽 Show Logs</button>
+        <div id="logContainer" style="display: none;">
+            <strong>Logs:</strong>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const toggleBtn = document.getElementById("toggleLog");
+            const logContainer = document.getElementById("logContainer");
+
+            toggleBtn.addEventListener("click", function () {
+                const isVisible = logContainer.style.display !== "none";
+
+                if (isVisible) {
+                    logContainer.style.display = "none";
+                    toggleBtn.innerText = "🔼 Show Logs";
+                } else {
+                    logContainer.style.display = "block";
+                    toggleBtn.innerText = "🔽 Hide Logs";
+                }
+            });
+        });
     </script>
 </body>
 </html>
