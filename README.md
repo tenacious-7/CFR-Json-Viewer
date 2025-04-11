@@ -1,4 +1,4 @@
-﻿# 📦 CFR JSON Viewer with .NET 6 Minimal API and React Frontend
+﻿# 📦  Solving Real-World Performance Issues with Lazy Loading (React + .NET Core)
 
 This project is designed to **store large JSON data in compressed form** inside SQL Server and **decompress it on-demand via an API**. The decompressed JSON is then displayed in a scrollable table using **React (via CDN)** on a static HTML page.
 
